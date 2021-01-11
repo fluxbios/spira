@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="utf-8"?>
+<report-database>
+ <description>mitll drc minimum size report</description>
+ <original-file/>
+ <generator>drc: script='DRCtests/min_spacing_generated.lydrc'</generator>
+ <top-cell>device_3</top-cell>
+ <tags>
+ </tags>
+ <categories>
+  <category>
+   <name>Min distance between M4 and M4 violation (&lt;1cm)</name>
+   <description/>
+   <categories>
+   </categories>
+  </category>
+  <category>
+   <name>Min distance between M4 and M4 violation (&gt;1cm)</name>
+   <description/>
+   <categories>
+   </categories>
+  </category>
+  <category>
+   <name>Min distance between I4 and I4 violation</name>
+   <description/>
+   <categories>
+   </categories>
+  </category>
+  <category>
+   <name>Min distance between M5 and M5 violation</name>
+   <description/>
+   <categories>
+   </categories>
+  </category>
+  <category>
+   <name>Min distance between I5 and I5 violation</name>
+   <description/>
+   <categories>
+   </categories>
+  </category>
+  <category>
+   <name>Min distance between M6 and M6 violation (&lt;1cm</name>
+   <description/>
+   <categories>
+   </categories>
+  </category>
+  <category>
+   <name>Min distance between M6 and M6 violation (&gt;1cm</name>
+   <description/>
+   <categories>
+   </categories>
+  </category>
+  <category>
+   <name>Min distance between I6 and I6 violation</name>
+   <description/>
+   <categories>
+   </categories>
+  </category>
+  <category>
+   <name>Min distance between M7 and M7 violation (&lt;1cm</name>
+   <description/>
+   <categories>
+   </categories>
+  </category>
+  <category>
+   <name>Min distance between M7 and M7 violation (&lt;1cm</name>
+   <description/>
+   <categories>
+   </categories>
+  </category>
+  <category>
+   <name>Min distance between M8 and M8 violation</name>
+   <description/>
+   <categories>
+   </categories>
+  </category>
+ </categories>
+ <cells>
+  <cell>
+   <name>device_3</name>
+   <variant/>
+   <references>
+   </references>
+  </cell>
+ </cells>
+ <items>
+ </items>
+</report-database>

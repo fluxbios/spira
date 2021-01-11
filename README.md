@@ -37,12 +37,41 @@ sudo dnf install tkinter
 sudo dnf install gmsh
 ```
 
+
+On CentOS7 install the following:
+
+install the required git libarary and clone the pyenv repo (allows the install of
+non-default python versions):
+
+```bash
+sudo yum install git gcc zlib-devel bzip2-devel readline-devel sqlite-devel openssl-devel xz-devel.x86_64 pyliblzma.x86_64 tk-devel.x86_64 
+git clone https://github.com/pyenv/pyenv.git $HOME/.pyenv
+```
+
+Now edit the bashrc file located at ~/.bashrc:
+
+Add the following lines to the user defined function:
+
+## pyenv configs
+export PYENV_ROOT="$HOME/.pyenv"
+export PATH="$PYENV_ROOT/bin:$PATH"if command -v pyenv 1>/dev/null 2>&1; then
+  eval "$(pyenv init -)"
+fi
+
+Thereaftere run the bashrc script:
+
+```bash
+source ~/.bashrc
+pyenv install 3.7-dev
+pyenv global 3.7
+
+
 ## Installation
 
 You can install SPiRA directly from the Python package manager *pip* using and remember to create a *virtual environment*:
 
 ```bash
-python3 -m venv env
+python3.7 -m venv env
 source env/bin/activate
 
 # Install requirements
@@ -87,6 +116,9 @@ python spira/technologies/default/circuits/ytron_circuit.py
 * Integrate with JoSIM and InductEx for parameter extraction.
 
 ## History of changes
+
+### Version 0.2.0 (August 12, 2019)
+* 
 
 ### Version 0.1.1 (July 16, 2019)
 * Updated the advanced tutorial documentation.

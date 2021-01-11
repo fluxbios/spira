@@ -1,0 +1,119 @@
+<?xml version="1.0" encoding="utf-8"?>
+<klayout-macro>
+ <description/>
+ <version/>
+ <category>drc</category>
+ <prolog/>
+ <epilog/>
+ <doc/>
+ <autorun>false</autorun>
+ <autorun-early>false</autorun-early>
+ <shortcut/>
+ <show-in-menu>true</show-in-menu>
+ <group-name>drc_scripts</group-name>
+ <menu-path>tools_menu.drc.end</menu-path>
+ <interpreter>dsl</interpreter>
+ <dsl-interpreter-name>drc-dsl-xml</dsl-interpreter-name>
+ <text>
+
+
+report("mitll drc minimum size report","min_size_report.lydb")
+source.layout.write("output.gds")
+
+m0          =input(1,   0).clean,  # M0
+m1          =input(10,  0).clean,  # M1
+m2          =input(20,  0).clean,  # M2
+m3          =input(30,  0).clean,  # M3
+m4          =input(40,  0).clean,  # M4
+m5          =input(50,  0).clean,  # M5
+m6          =input(60,  0).clean,  # M6
+m7          =input(70,  0).clean,  # M7
+m8          =input(80,  0).clean,  # M8
+
+r5          =input(52,  0).clean,  # R5
+j5          =input(51,  0).clean,  # J5
+c5j         =input(55,  0).clean,  # C5J
+c5r         =input(56,  0).clean,  # C5R
+
+i0         =input(2,   0).clean,  # I0
+i1         =input(11,  0).clean,  # I1
+i2         =input(21,  0).clean,  # I2
+i3         =input(31,  0).clean,  # I3
+i4         =input(41,  0).clean,  # I4
+i5         =input(54,  0).clean,  # I5
+i6         =input(61,  0).clean,  # I6
+i7         =input(71,  0).clean   # I7
+
+
+
+r = i0.width(0.6)
+output(r, "Min size violation on i0")
+
+r = m1.width(0.5)
+output(r, "Min size violation on m1")
+
+
+r = i1.width(0.6)
+output(r, "Min size violation on i1")
+
+r = m2.width(0.3)
+output(r, "Min size violation on m2")
+
+r = m2.width(0.5)
+output(r, "Min size violation on m2")
+
+r = i2.width(0.6)
+output(r, "Min size violation on i2")
+
+r = m3.width(0.3)
+output(r, "Min size violation on m3")
+
+r = i3.width(0.6)
+output(r, "Min size violation on i3")
+
+
+r = m4.width(0.3)
+output(r, "Min size violation on m4")
+
+r = m4.width(0.5)
+output(r, "Min size violation on m4")
+
+r = i4.width(0.8)
+output(r, "Min size violation on i4")
+
+r = m5.width(0.7)
+output(r, "Min size violation on m5")
+
+r = j5.with_bbox_width(0.7)
+output(r, "Min size violation on j5")
+
+r = r5.width(0.5)
+output(r, "Min size violation on r5")
+
+r = i5.width(0.7)
+output(r, "Min size violation on i5")
+
+r = c5j.width(0.5)
+output(r, "Min size violation on c5j")
+
+r = c5r.width(0.5)
+output(r, "Min size violation on c5r")
+
+r = m6.width(0.5)
+output(r, "Min size violation on m6")
+
+r = i6.width(0.7)
+output(r, "Min size violation on i6")
+
+r = m7.width(0.5)
+output(r, "Min size violation on m7")
+
+r = i7.width(5.0)
+output(r, "Min size violation on i7")
+
+r = m8.width(10.0)
+output(r, "Min size violation on m8")
+
+
+</text>
+</klayout-macro>
