@@ -1,20 +1,20 @@
 import numpy as np
 import networkx as nx
-import spira.all as spira
 
 from copy import deepcopy
 from spira.core.parameters.variables import GraphParameter, StringParameter
-from spira.core.parameters.descriptor import Parameter
+from spira.core.parameters.descriptor import Parameter, RestrictedParameter
 from spira.yevon.geometry.coord import Coord
 from spira.yevon.vmodel.geometry import GeometryParameter
 from spira.yevon.geometry.ports.base import __Port__
+from spira.core.parameters.restrictions import RestrictType
 from spira.yevon.process import get_rule_deck
 
 
 RDD = get_rule_deck()
 
 
-__all__ = ['Net']
+__all__ = ['Net', 'NetParameter']
 
 
 ELM_TYPE = {1: 'line', 2: 'triangle'}
@@ -41,6 +41,8 @@ class Net(__Net__):
 
     mesh_data = Parameter(fdef_name='create_mesh_data')
     geometry = GeometryParameter(allow_none=True, default=None)
+
+    branch_nodes = Parameter(fdef_name='create_branch_nodes')
 
     lines = Parameter(fdef_name='create_lines')
     triangles = Parameter(fdef_name='create_triangles')
@@ -182,9 +184,10 @@ class Net(__Net__):
                     # print(name)
                     # print(value)
                     # print('')
-                    polygon_string = name.split('_')[0]
-                    polygon_uid = int(name.split('_')[1])
-                    key = (polygon_string, polygon_uid)
+                    polygon_string = name.split('*')[0]
+                    polygon_hash = name.split('*')[1]
+                    polygon_uid = int(name.split('*')[2])
+                    key = (polygon_string, polygon_hash, polygon_uid)
                     if key in lines:
                         lines[key].append(n)
                     else:
@@ -230,241 +233,127 @@ class Net(__Net__):
             self.g.node[n]['position'] = transformation.apply_to_coord(self.g.node[n]['position'])
         return self
 
+    def create_branch_nodes(self):
+        """ Nodes that defines different conducting branches. """
+        from spira.yevon.gdsii.sref import SRef
+        from spira.yevon.geometry.ports import Port
+        branch_nodes = list()
+        for n in self.g.nodes():
+            if 'device_reference' in self.g.node[n]:
+                D = self.g.node[n]['device_reference']
+                if isinstance(D, SRef):
+                    branch_nodes.append(n)
+                if isinstance(D, Port):
+                    branch_nodes.append(n)
+        return branch_nodes
 
+    def st_nodes(self):
+        """ Nodes that defines different conducting branches.
+        All nodes are ports. Chek port purposes.
+        """
+        from spira.yevon.gdsii.sref import SRef
+        from spira.yevon.geometry.ports import Port
+        branch_nodes = list()
+        for n in self.g.nodes():
+            if 'device_reference' in self.g.node[n]:
+                D = self.g.node[n]['device_reference']
+                P = self.g.node[n]['process_polygon']
+                # FIXME: Maybe implement node operators (__and__, etc)
+                # if (D.purpose.symbol == 'B') and (P.layer.purpose.symbol == 'DEVICE_METAL'):
+                #     branch_nodes.append(n)
+                if D.purpose.symbol == 'C':
+                    branch_nodes.append(n)
+                elif D.purpose.symbol == 'D':
+                    branch_nodes.append(n)
+                # elif D.purpose.symbol == 'P':
+                #     branch_nodes.append(n)
+                elif D.purpose.symbol == 'T':
+                    branch_nodes.append(n)
+                # elif (D.purpose.symbol == 'P') and (D.name[1] != 'E'):
+                #     branch_nodes.append(n)
+        return branch_nodes
 
+    def convert_to_branch_node(self, n, uid):
+        pass
 
-# FIXME: Maybe convert this to a BranchList class.
-class CellNet(__Net__):
-    """  """
+    def del_branch_attrs(self):
+        """ Reset the branch attrs for new branch node creation. """
+        for n in self.g.nodes():
+            if 'branch_node' in self.g.node[n]:
+                del self.g.node[n]['branch_node']
+        return self
 
-    _ID = 0
+    def convert_pins(self):
+        """ Remove pin node attrs with more than 1 edge connected to it. """
+        for n in self.g.nodes():
+            if 'device_reference' in self.g.node[n]:
+                D = self.g.node[n]['device_reference']
+                if D.purpose.symbol == 'P':
+                    if len(self.g.edges(n)) > 0:
+                        del self.g.node[n]['device_reference']
+        return self
 
-    __stored_paths__ = []
-    __branch_nodes__ = None
+    def convert_device(self):
+        """ Convert a device metal node to a dummy port.
+        Has to be connected to atleast 1 PEdge node. """
 
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
+        from spira.yevon.geometry.ports import Port
 
-    def __remove_nodes__(self):
+        for n in self.g.nodes():
+            convert = False
+            
+            P = self.g.node[n]['process_polygon']
+
+            if P.layer.purpose.symbol == 'DEVICE_METAL':
+                for i in self.g.neighbors(n):
+                    if 'device_reference' in self.g.node[i]:
+                        D = self.g.node[i]['device_reference']
+                        # print(D)
+                        if D.purpose.symbol == 'P':
+                            convert = True
+    
+            if convert is True:
+                port = Port(
+                    name='Djj{}'.format(n),
+                    midpoint=P.center,
+                    process=P.layer.process,
+                )
+                self.g.node[n]['device_reference'] = port
+        return self
+
+    def remove_nodes(self):
         """
         Nodes to be removed:
         1. Are not a branch node.
         2. Are not a device node.
         3. Branch nodes must equal the branch id.
         """
+        from spira.yevon.gdsii.sref import SRef
+        from spira.yevon.geometry.ports import Port
+
         locked_nodes = []
         remove_nodes = []
-        text = self.__get_called_id__()
         for n in self.g.nodes():
             if 'branch_node' in self.g.node[n]:
-                if isinstance(self.g.node[n]['branch_node'], spira.Label):
-                    if self.g.node[n]['branch_node'].text == text:
-                        locked_nodes.append(n)
+                D = self.g.node[n]['branch_node']
+                if isinstance(D, Port):
+                    locked_nodes.append(n)
             elif 'device_reference' in self.g.node[n]:
                 D = self.g.node[n]['device_reference']
-                if isinstance(D, spira.Port):
-                    locked_nodes.append(n)
-                elif isinstance(D, spira.ContactPort):
+                if isinstance(D, (Port, SRef)):
                     locked_nodes.append(n)
         for n in self.g.nodes():
             if n not in locked_nodes:
                 remove_nodes.append(n)
         self.g.remove_nodes_from(remove_nodes)
 
-    def __validate_path__(self, path):
-        # from spira.netex.devices import Via
-        """ Test if path contains masternodes. """
-        valid = True
-        s, t = path[0], path[-1]
-        if self.__is_path_stored__(s, t):
-            valid = False
-        if s not in self.__branch_nodes__:
-            valid = False
-        if t not in self.__branch_nodes__:
-            valid = False
-        for n in path[1:-1]:
-            if 'device_reference' in self.g.node[n]:
-                D = self.g.node[n]['device_reference']
-                # if issubclass(type(D), __Port__):
-                #     if not isinstance(D, spira.Port):
-                #         valid = False
-                if issubclass(type(D), __Port__):
-                    valid = False
-                if issubclass(type(D), spira.SRef):
-                    valid = False
-        return valid
 
-    def __store_branch_paths__(self, s, t):
-        if nx.has_path(self.g, s, t):
-            p = nx.shortest_path(self.g, source=s, target=t)
-            if self.__validate_path__(p):
-                self.__stored_paths__.append(p)
-
-    def __is_path_stored__(self, s, t):
-        for path in self.__stored_paths__:
-            if (s in path) and (t in path):
-                return True
-        return False
-
-    def __reset_stored_paths__(self):
-        self.__stored_paths__ = []
-
-    def __increment_caller_id__(self):
-        self._ID += 1
-
-    def __get_called_id__(self):
-        return '__{}__'.format(self._ID)
-
-    def __branch_id__(self, i, s, t):
-        ntype = 'nodetype: {}'.format('branch_node')
-        number = 'number: {}'.format(i)
-
-        Ds = self.g.node[s]['device_reference']
-        Dt = self.g.node[t]['device_reference']
-
-        if issubclass(type(Ds), spira.SRef):
-            source = 'source: {}'.format(Ds.reference.name)
-        # elif isinstance(Ds, spira.Port):
-        elif isinstance(Ds, (spira.ContactPort, spira.Port)):
-            source = 'source: {}'.format(Ds.name)
-
-        if issubclass(type(Dt), spira.SRef):
-            target = 'target: {}'.format(Dt.reference.name)
-        # elif isinstance(Dt, spira.spira.Port):
-        elif isinstance(Ds, (spira.ContactPort, spira.Port)):
-            target = 'target: {}'.format(Dt.name)
-
-        # if issubclass(type(Ds), spira.SRef):
-        #     source = 'source: {}'.format(Ds.reference.name)
-        # elif issubclass(type(Ds), __Port__):
-        #     if isinstance(Ds, spira.Port):
-        #         source = 'source: {}'.format(Ds.name)
-
-        # if issubclass(type(Dt), spira.SRef):
-        #     target = 'target: {}'.format(Dt.reference.name)
-        # elif issubclass(type(Dt), __Port__):
-        #     if not isinstance(Dt, spira.spira.Port):
-        #         target = 'target: {}'.format(Dt.name)
-
-        return "\n".join([ntype, number, source, target])
-
-    @property
-    def branch_nodes(self):
-        """ Nodes that defines different conducting branches. """
-        branch_nodes = list()
-        for n in self.g.nodes():
-            if 'device_reference' in self.g.node[n]:
-                D = self.g.node[n]['device_reference']
-                if isinstance(D, spira.SRef):
-                    branch_nodes.append(n)
-                if isinstance(D, spira.Port):
-                    branch_nodes.append(n)
-                if isinstance(D, spira.ContactPort):
-                    branch_nodes.append(n)
-                if isinstance(D, spira.BranchPort):
-                    branch_nodes.append(n)
-        return branch_nodes
-
-    @property
-    def master_nodes(self):
-        """ Excludes via devices with only two edges (series). """
-        from spira.netex.devices import Via
-        branch_nodes = list()
-        for n in self.g.nodes():
-            if 'device_reference' in self.g.node[n]:
-                D = self.g.node[n]['device_reference']
-                if issubclass(type(D), spira.SRef):
-                    if issubclass(type(D.ref), Via):
-                        if len([i for i in self.g[n]]) > 2:
-                            branch_nodes.append(n)
-                    else:
-                        branch_nodes.append(n)
-                if issubclass(type(D), __Port__):
-                    branch_nodes.append(n)
-        return branch_nodes
-
-    @property
-    def terminal_nodes(self):
-        """ Nodes that defines different conducting branches. """
-        branch_nodes = list()
-        for n in self.g.nodes():
-            if 'device_reference' in self.g.node[n]:
-                D = self.g.node[n]['device_reference']
-                if issubclass(type(D), spira.Port):
-                    if not isinstance(D, spira.spira.Port):
-                        branch_nodes.append(n)
-        return branch_nodes
-
-    def detect_dummy_nodes(self):
-
-        for sg in nx.connected_component_subgraphs(self.g, copy=True):
-            s = self.__branch_nodes__[0]
-
-            paths = []
-            for t in filter(lambda x: x not in [s], self.__branch_nodes__):
-                # if nx.has_path(self.g, s, t):
-                #     p = nx.shortest_path(self.g, source=s, target=t)
-                #     paths.append(p)
-                if nx.has_path(self.g, s, t):
-                    for p in nx.all_simple_paths(self.g, source=s, target=t):
-                        paths.append(p)
-
-            new_paths = []
-            for p1 in paths:
-                for p2 in filter(lambda x: x not in [p1], paths):
-                    set_2 = frozenset(p2)
-                    intersecting_paths = [x for x in p1 if x in set_2]
-                    new_paths.append(intersecting_paths)
-
-            dummies = set()
-            for path in new_paths:
-                p = list(path)
-                dummies.add(p[-1])
-
-            for i, n in enumerate(dummies):
-                if 'branch_node' in self.g.node[n]:
-                    N = self.g.node[n]['branch_node']
-                    port = BranchPort(
-                        name='D{}'.format(i), 
-                        midpoint=N.position, 
-                        process=RDD.PROCESS.M2, 
-                        purpose=RDD.PURPOSE.PORT.BRANCH
-                    )
-                    self.g.node[n]['device_reference'] = port
-                    self.g.node[n]['display'] = RDD.DISPLAY.STYLE_SET[port.layer]
-                    del self.g.node[n]['branch_node']
-
-    def generate_branches(self):
-        """  """
-
-        self.__reset_stored_paths__()
-        self.__increment_caller_id__()
-
-        self.__branch_nodes__ = self.branch_nodes
-
-        for sg in nx.connected_component_subgraphs(self.g, copy=True):
-            for s in self.__branch_nodes__:
-                # targets = filter(lambda x: x not in [s], self.master_nodes)
-                targets = filter(lambda x: x not in [s], self.__branch_nodes__)
-                for t in targets:
-                    self.__store_branch_paths__(s, t)
-
-            for i, path in enumerate(self.__stored_paths__):
-                text = self.__get_called_id__()
-                node_id = self.__branch_id__(i, path[0], path[-1])
-                for n in path[1:-1]:
-                    ply = self.g.node[n]['process_polygon']
-                    label = spira.Label(position=ply.center, text=text, layer=ply.layer)
-                    self.g.node[n]['branch_node'] = label
-
-        self.__remove_nodes__()
-
-        return self.g
+def NetParameter(local_name=None, restriction=None, **kwargs):
+    R = RestrictType(Net) & restriction
+    return RestrictedParameter(local_name, restriction=R, **kwargs)
 
 
-# TODO!!!
-# Create a T-shape and a L-shape.
-# Create cross-over connector.
+
 
 
 

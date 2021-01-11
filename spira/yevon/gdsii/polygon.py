@@ -2,19 +2,12 @@ import gdspy
 import pyclipper
 import numpy as np
 
-from copy import deepcopy
-from spira.core.transforms import stretching
-from spira.yevon.geometry import bbox_info
-from spira.yevon.utils import clipping
-from spira.yevon.gdsii.base import __LayerElement__
-from spira.yevon.geometry.coord import CoordParameter, Coord
-from spira.core.parameters.descriptor import ParameterDescriptor, FunctionParameter, Parameter
-from spira.yevon.geometry.ports.base import __Port__
 from spira.core.parameters.variables import *
-from spira.core.transforms.stretching import *
+
+from copy import deepcopy
+from spira.yevon.gdsii.base import __ShapeElement__
+from spira.core.parameters.descriptor import FunctionParameter
 from spira.yevon.geometry import shapes
-from spira.yevon.geometry.shapes import ShapeParameter
-from spira.yevon.process.gdsii_layer import Layer
 from spira.yevon.process import get_rule_deck
 
 
@@ -33,128 +26,7 @@ __all__ = [
 ]
 
 
-class __ShapeElement__(__LayerElement__):
-    """ Base class for an edge element. """
-
-    shape = ShapeParameter()
-
-    @property
-    def points(self):
-        return self.shape.points
-        
-    @property
-    def area(self):
-        return gdspy.Polygon(self.shape.points).area()
-
-    @property
-    def count(self):
-        return np.size(self.shape.points, 0)
-
-    @property
-    def center(self):
-        return self.bbox_info.center
-
-    @center.setter
-    def center(self, destination):
-        self.move(midpoint=self.center, destination=destination)
-
-    @property
-    def bbox_info(self):
-        return self.shape.bbox_info.transform_copy(self.transformation)
-
-    def id_string(self):
-        sid = '{} - hash {}'.format(self.__repr__(), self.shape.hash_string)
-        return sid
-
-    def is_empty(self):
-        """ Returns `False` is the polygon shape has no points. """
-        return self.shape.is_empty()
-
-    def encloses(self, point):
-        """ Returns `True` if the polygon encloses the point. """
-        from spira.yevon.utils import clipping
-        shape = self.shape.transform_copy(self.transformation)
-        return clipping.encloses(coord=point, points=shape.points)
-
-    def expand_transform(self):
-        """ Expand the transform by applying it to the shape. """
-        from spira.core.transforms.identity import IdentityTransform
-        if not self.transformation.is_identity():
-            self.shape = self.shape.transform_copy(self.transformation)
-            self.transformation = IdentityTransform()
-        return self
-
-    # FIXME: Move this to an output generator.
-    def convert_to_gdspy(self, transformation=None):
-        """ Converts a SPiRA polygon to a Gdspy polygon.
-        The extra transformation parameter is the
-        polygon edge ports. """
-        layer = RDD.GDSII.EXPORT_LAYER_MAP[self.layer]
-        T = self.transformation + transformation
-        shape = self.shape.transform_copy(T)
-        return gdspy.Polygon(points=shape.points, layer=layer.number, datatype=layer.datatype)
-
-
-class __Polygon__(__ShapeElement__):
-
-    enable_edges = BoolParameter(default=True)
-
-    def fillet(self, radius, angle_resolution=128, precision=0.001):
-        """ Applies fillet rounding algorithm to polygon corners. """
-        super().fillet(radius=radius, points_per_2pi=angle_resolution, precision=precision)
-        self.shape.points = self.polygons
-        return self
-
-    def stretch(self, factor=(1,1), center=(0,0)):
-        """ Stretches the polygon by a factor. """
-        T = spira.Stretch(stretch_factor=factor, stretch_center=center)
-        return T.apply(self)
-
-    def stretch_copy(self, factor=(1,1), center=(0,0)):
-        """ Stretches a copy of the polygon by a factor. """
-        T = spira.Stretch(stretch_factor=factor, stretch_center=center)
-        return T.apply_copy(self)
-
-    def stretch_port(self, port, destination):
-        """ The element by moving the subject port, without 
-        distorting the entire element. Note: The opposite 
-        port position is used as the stretching center. """
-        opposite_port = bbox_info.bbox_info_opposite_boundary_port(self, port)
-        T = stretching.stretch_element_by_port(self, opposite_port, port, destination)
-        T.apply(self)
-        return self
-
-    def move(self, midpoint=(0,0), destination=None, axis=None):
-        """ Moves the polygon from `midpoint` to a `destination`. """
-
-        if destination is None:
-            destination = midpoint
-            midpoint = Coord(0,0)
-
-        if isinstance(midpoint, Coord):
-            m = midpoint
-        elif np.array(midpoint).size == 2:
-            m = Coord(midpoint)
-        elif issubclass(type(midpoint), __Port__):
-            m = midpoint.midpoint
-        else:
-            raise ValueError('Midpoint error')
-
-        if issubclass(type(destination), __Port__):
-            d = destination.midpoint
-        if isinstance(destination, Coord):
-            d = destination
-        elif np.array(destination).size == 2:
-            d = Coord(destination)
-        else:
-            raise ValueError('Destination error')
-
-        dxdy = d - m
-        self.translate(dxdy)
-        return self
-
-
-class Polygon(__Polygon__):
+class Polygon(__ShapeElement__):
     """
     Element that connects shapes to the GDSII file format.
     Polygon are objects that represents the shapes in a layout.
@@ -168,22 +40,22 @@ class Polygon(__Polygon__):
 
     _next_uid = 0
 
-    edges = Parameter(fdef_name='create_edges')
-
     def get_alias(self):
         if not hasattr(self, '__alias__'):
-            self.__alias__ = self.process
+            self.__alias__ = self.layer.process.symbol
         return self.__alias__
 
     def set_alias(self, value):
-        if value is not None:
+        if isinstance(value, str):
             self.__alias__ = value
+        elif isinstance(value, list):
+            self.__alias__ = ':'.join(value)
 
     alias = FunctionParameter(get_alias, set_alias, doc='Functions to generate an alias for cell name.')
 
     def __init__(self, shape, layer, transformation=None, **kwargs):
         super().__init__(shape=shape, layer=layer, transformation=transformation, **kwargs)
-        
+
         self.uid = Polygon._next_uid
         Polygon._next_uid += 1
 
@@ -192,7 +64,8 @@ class Polygon(__Polygon__):
             return 'Polygon is None!'
         layer = RDD.GDSII.IMPORT_LAYER_MAP[self.layer]
         class_string = "[SPiRA: Polygon \'{}\'] (center {}, vertices {}, process {}, purpose {})"
-        return class_string.format(self.alias, self.center, self.count, self.process, self.purpose)
+        return class_string.format(self.alias, self.center, self.count,
+                                   self.layer.process.symbol, self.layer.purpose.symbol)
 
     def __str__(self):
         return self.__repr__()
@@ -202,22 +75,26 @@ class Polygon(__Polygon__):
 
     # NOTE: We are not copying the ports, so they
     # can be re-calculated for the transformed shape.
+    # Specifically after a expand_flat_copy.
+    # FIXME: But this causes problems with the netlist extraction.
     def __deepcopy__(self, memo):
-        return self.__class__(
+        # ports = self.ports.transform_copy(self.transformation)
+        # return self.__class__(
+        return Polygon(
+            alias=self.alias,
             shape=deepcopy(self.shape),
             layer=deepcopy(self.layer),
-            transformation=deepcopy(self.transformation)
+            ports=deepcopy(self.ports),
+            # FIXME: Deepcopy removes the Stretching from Compound Transform.
+            # transformation=deepcopy(self.transformation)
+            transformation=self.transformation
         )
 
-    def id_string(self):
-        sid = '{} - hash {}'.format(self.__repr__(), self.shape.hash_string)
-        return sid
-
-    def create_edges(self):
-        """ Generate default edges for this polygon.
-        These edges can be transformed using adapters. """
-        from spira.yevon.geometry.edges.edges import generate_edges
-        return generate_edges(shape=self.shape, layer=self.layer)
+    def short_string(self):
+        # return "Polygon [{}, {}, {}]".format(self.center, self.layer.process.symbol, self.layer.purpose.symbol)
+        # NOTE: We want to ignore the purpose for CIRCUIT_METAL ot DEVICE_METAL net connections.
+        layer = RDD.GDSII.IMPORT_LAYER_MAP[self.layer]
+        return "Polygon [{}, {}]".format(self.center, layer.process.symbol)
 
     def flat_copy(self, level=-1):
         """ Flatten a copy of the polygon. """
@@ -225,47 +102,54 @@ class Polygon(__Polygon__):
         S.expand_transform()
         return S
 
-    def flatten(self, level=-1):
+    def flat_container(self, cc, name_tree=[]):
         """ Flatten the polygon without creating a copy. """
-        return self.expand_transform()
+        self.alias = name_tree
+        self.alias += ':' + self.layer.process.symbol
+        cc += self
+        # cc.ports += self.edge_ports
+        return cc
 
     def nets(self, lcar):
         from spira.yevon.geometry.nets.net import Net
         from spira.yevon.vmodel.geometry import GmshGeometry
-        from spira.yevon.geometry.ports.port import ContactPort
         from spira.yevon import filters
 
-        if self.purpose == 'METAL':
+        if self.layer.purpose.symbol in ['METAL', 'DEVICE_METAL', 'CIRCUIT_METAL']:
 
             if RDD.ENGINE.GEOMETRY == 'GMSH_ENGINE':
-                geometry = GmshGeometry(lcar=lcar,
+                geometry = GmshGeometry(lcar=0.5,
+                # geometry = GmshGeometry(lcar=lcar,
                     process=self.layer.process,
                     process_polygons=[deepcopy(self)])
 
             cc = []
+
             for p in self.ports:
-                if isinstance(p, ContactPort):
-                    cc.append(p)
+                # if p.purpose == RDD.PURPOSE.PORT.PIN:
+                if p.purpose == RDD.PURPOSE.PORT.TERMINAL:
+                    c_port = p.transform_copy(self.transformation)
+                    cc.append(c_port)
+                    # cc.append(p)
+                elif p.purpose == RDD.PURPOSE.PORT.CONTACT:
+                    c_port = p.transform_copy(self.transformation)
+                    cc.append(c_port)
+                    # cc.append(p)
 
-            F = filters.ToggledCompoundFilter()
+            F = filters.ToggledCompositeFilter(filters=[])
             F += filters.NetProcessLabelFilter(process_polygons=[deepcopy(self)])
+            F += filters.NetEdgeFilter(process_polygons=deepcopy(self))
             F += filters.NetDeviceLabelFilter(device_ports=cc)
-            F += filters.NetEdgeFilter(process_polygons=[deepcopy(self)])
+            F += filters.NetBranchFilter()
 
-            net = Net(name=self.process, geometry=geometry)
+            # if self.layer.purpose.symbol == 'CIRCUIT_METAL':
+            #     F += filters.NetDummyFilter()
 
-            return F(net)
+            net = Net(name=self.layer.process.symbol, geometry=geometry)
 
-            # # from spira.yevon.utils.netlist import combine_net_nodes
-            # # net.g = combine_net_nodes(g=net.g, algorithm='d2d')
-            # # net.g = combine_net_nodes(g=net.g, algorithm='s2s')
+            net = F(net)[0]
 
-            # from spira.yevon.geometry.nets.net import CellNet
-            # cn = CellNet()
-            # cn.g = net.g
-            # # cn.generate_branches()
-            # # cn.detect_dummy_nodes()
-            # return cn
+            return net
 
         return []
 
@@ -335,7 +219,8 @@ def Cross(layer, box_size=20, thickness=5, center=(0,0), alias=None, transformat
     return Polygon(alias=alias, shape=shape, layer=layer, transformation=transformation)
 
 
-def Wedge(layer, begin_coord=(0,0), end_coord=(10,0), begin_width=3, end_width=1, center=(0,0), alias=None, transformation=None):
+def Wedge(layer, begin_coord=(0,0), end_coord=(10,0), begin_width=3,
+          end_width=1, center=(0,0), alias=None, transformation=None):
     """ Creates a circle shape that can be used in 
     GDSII format as a polygon object.
 
@@ -353,7 +238,8 @@ def Wedge(layer, begin_coord=(0,0), end_coord=(10,0), begin_width=3, end_width=1
     return Polygon(alias=alias, shape=shape, layer=layer, transformation=transformation)
 
 
-def Parabolic(layer, begin_coord=(0,0), end_coord=(10,0), begin_width=3, end_width=1, center=(0,0), alias=None, transformation=None):
+def Parabolic(layer, begin_coord=(0,0), end_coord=(10,0), begin_width=3,
+              end_width=1, center=(0,0), alias=None, transformation=None):
     """ Creates a circle shape that can be used in 
     GDSII format as a polygon object.
 

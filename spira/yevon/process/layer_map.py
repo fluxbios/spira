@@ -30,14 +30,19 @@ class MapGdsiiToPhysical(ParameterInitializer):
             return key
         elif isinstance(key, Layer):
             # print(key)
+            # print(self.layer_process_map.keys())
             # FIXME: Implement error checking for if layer number is not found in RDD.
             if key.number in self.layer_process_map:
                 pc = self.layer_process_map[key.number]
                 pp = self.datatype_purpose_map[key.datatype]
                 return PhysicalLayer(process=pc, purpose=pp)
-            return PhysicalLayer(process=RDD.PROCESS.VIRTUAL, purpose=RDD.PURPOSE.TEXT)
+            raise ValueError('Layer number not found in {}.'.format(RDD))
+            # return PhysicalLayer(process=RDD.PROCESS.VIRTUAL, purpose=RDD.PURPOSE.TEXT)
         else:
             raise Exception("Key should be of type PhysicalLayer, but is of type %s." %type(key))
+
+    def get(self, key, default):
+        return self.__getitem__(key, default)
 
 
 class MapPhysicalToGdsii(ParameterInitializer):
@@ -56,3 +61,5 @@ class MapPhysicalToGdsii(ParameterInitializer):
         else:
             raise Exception("Key should be of type PhysicalLayer, but is of type %s." %type(key))
 
+    def get(self, key, default):
+        return self.__getitem__(key, default)

@@ -1,0 +1,4 @@
+[console_scripts]
+meshio-convert = meshio._cli:convert
+meshio-info = meshio._cli:info
+

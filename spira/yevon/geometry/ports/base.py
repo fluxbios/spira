@@ -21,27 +21,26 @@ class MetaPort(MetaInitializer):
     """ Called when an instance of a SPiRA Port is created. """
 
     def get_port_data(self, kwargs):
+
         if 'name' in kwargs:
             if (kwargs['name'] is None) or (kwargs['name'] == ''):
                 raise ValueError('Port name cannot be generated.')
-            full_name = kwargs['name'].split(':')
-            # print(full_name)
-            nl = full_name[-1].split('_')
-        port_data = {}
-        port_data['name'] = nl[0]
-        port_data['purpose_symbol'] = nl[0][0]
 
-        if len(nl) == 1:
-            port_data['process_symbol'] = None
-        # elif len(nl) == 2:
-        elif len(nl) > 1:
-            port_data['process_symbol'] = nl[1]
+            name = kwargs['name']
+            name_list = name.split(':')
 
-        if len(nl) == 3:
-            port_data['sref_name'] = nl[2]
-        # else: 
-        #     error_message = "Port name format must be: \'port_data_Process\' or \'port_data\'"
-        #     raise ValueError(error_message)
+            port_data = {}
+            port_data['name'] = name
+            port_data['purpose_symbol'] = name_list[-1][0]
+    
+            if len(name_list) == 1:
+                port_data['process_symbol'] = None
+            elif len(name_list) > 1:
+                port_data['process_symbol'] = name_list[-2]
+        else: 
+            error_message = "Port name format must be: \'port_data_Process\' or \'port_data\'"
+            raise ValueError(error_message)
+
         return port_data
 
     def _bind_purpose(self, kwargs):
@@ -84,7 +83,7 @@ class MetaPort(MetaInitializer):
             error_message = "Cannot connect port \'{}\' to a process."
             raise ValueError(error_message.format(port_data['name']))
         process = kwargs['process']
-        name = '{}_{}'.format(port_data['name'], process.symbol)
+        name = '{}:{}'.format(process.symbol, port_data['name'])
         return name, process
 
     def _bind_name_to_process(self, kwargs):
@@ -132,6 +131,7 @@ class MetaPort(MetaInitializer):
             kwargs['process'] = process
         if purpose is not None:
             kwargs['purpose'] = purpose
+        kwargs['alias'] = name.split(':')[-1]
 
         cls = super().__call__(**kwargs)
         cls.__keywords__ = kwargs
@@ -143,6 +143,8 @@ class __Port__(ParameterInitializer, metaclass=MetaPort):
     """  """
 
     doc = StringParameter()
+    name = StringParameter(doc='The full name tree of the port.')
+    alias = StringParameter(doc='The name of the port without the tree hierarchy.')
     process = ProcessParameter(allow_none=True, default=None)
     purpose = PurposeLayerParameter(allow_none=True, default=None)
     text_type = NumberParameter(default=RDD.GDSII.TEXT)
@@ -164,6 +166,11 @@ class __Port__(ParameterInitializer, metaclass=MetaPort):
         p1 = Coord(self.midpoint[0], self.midpoint[1]) - Coord(other[0], other[1])
         return p1
 
+    # TODO: Maybe make this a getter and setter?
+    @property
+    def layer(self):
+        return PLayer(self.process, self.purpose)
+
     def flat_copy(self, level=-1):
         """ Return a flattened copy of the port. """
         port = self.copy(transformation=self.transformation)
@@ -173,7 +180,7 @@ class __Port__(ParameterInitializer, metaclass=MetaPort):
     def encloses(self, points):
         """ Return `True` if the port is inside the shape. """
         from spira.yevon.utils import clipping
-        return clipping.encloses(coord=self.midpoint, points=points)
+        return clipping.encloses(coord=self.midpoint.snap_to_grid(), points=points)
 
     def move(self, coordinate):
         """ Move the port midpoint to coordinate. """
@@ -183,10 +190,6 @@ class __Port__(ParameterInitializer, metaclass=MetaPort):
     def distance(self, other):
         """ Get the absolute distance between two ports. """
         return norm(np.array(self.midpoint) - np.array(other.midpoint))
-
-    @property
-    def layer(self):
-        return PLayer(self.process, self.purpose)
 
 
 

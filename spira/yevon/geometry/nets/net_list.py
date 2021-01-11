@@ -42,10 +42,10 @@ class NetList(TypedList):
             c.move(position)
         return self
 
-    def movecopy(self, position):
+    def move_copy(self, position):
         T = self.__class__()
         for c in self._list:
-            T.append(c.movecopy(position))
+            T.append(c.move_copy(position))
         return T
 
     def transform_copy(self, transformation):
@@ -58,18 +58,9 @@ class NetList(TypedList):
         for c in self._list:
             c.transform(transformation)
         return self
-        
-    # def disjoint(self, connect=False):
-    #     graphs = [net.g for net in self._list]
-    #     G = nx.disjoint_union_all(graphs)
-    #     if connect is True:
-    #         graphs = list(nx.connected_component_subgraphs(G))
-    #         G = nx.disjoint_union_all(graphs)
-    #     net = Net(g=G)
-    #     return net
 
     def disjoint(self):
-        graphs= [net.g for net in self._list]
+        graphs = [net.g for net in self._list]
         net = Net(g=nx.disjoint_union_all(graphs))
         return net
 

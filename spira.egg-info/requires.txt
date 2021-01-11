@@ -1,0 +1,16 @@
+colorama
+gdspy
+lxml
+matplotlib
+meshio
+networkx
+numpy
+pandoc
+plotly
+pyclipper
+pygmsh
+pyqt5
+scipy
+shapely
+sphinxcontrib-napoleon
+termcolor

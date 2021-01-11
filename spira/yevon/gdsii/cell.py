@@ -149,8 +149,8 @@ class Cell(__Cell__):
 
     alias = FunctionParameter(get_alias, set_alias, doc='Functions to generate an alias for cell name.')
 
-    def __init__(self, name=None, elements=None, ports=None, nets=None, library=None, **kwargs):
-        __Cell__.__init__(self, **kwargs)
+    def __init__(self, name=None, elements=None, ports=None, library=None, **kwargs):
+        super().__init__(**kwargs)
 
         if name is not None:
             s = '{}_{}'.format(name, Cell._next_uid)
@@ -174,56 +174,45 @@ class Cell(__Cell__):
     def __str__(self):
         return self.__repr__()
 
+    def __deepcopy__(self, memo):
+        # FIXME: Check with stretching.
+        return self.__class__(
+        # return Cell(
+            # name=self.name + '_copy',
+            # name=self.name,
+            alias=self.alias,
+            elements=deepcopy(self.elements),
+            ports=deepcopy(self.ports)
+        )
+
     def create_name(self):
         if not hasattr(self, '__name__'):
             self.__name__ = self.__name_generator__(self)
         return self.__name__
 
+    def create_netlist(self):
+        net = self.nets(lcar=self.lcar).disjoint()
+        return net
+
+    def nets(self, lcar):
+        return self.elements.nets(lcar=lcar)
+
     def expand_transform(self):
-        for S in self.elements.sref:
-            S.expand_transform()
-            S.reference.expand_transform()
+        self.elements.expand_transform()
         return self
+
+    def flat_container(self, cc, name_tree=[]):
+        self.elements.flat_container(cc, name_tree=name_tree)
+        return cc
 
     def expand_flat_copy(self, exclude_devices=False):
         from spira.yevon.gdsii.pcell import Device
         from spira.yevon.gdsii.polygon import Polygon
         from spira.yevon.gdsii.sref import SRef
-        from spira.core.transforms.translation import Translation
-
-        name = ''
         S = self.expand_transform()
-        C = Cell(name=S.name + '_ExpandedCell')
-        def _traverse_polygons(subj, cell, name):
-            c_name = deepcopy(name)
-            # print(cell)
-            for e in cell.elements:
-                if isinstance(e, SRef):
-                    if e.alias is not None:
-                        c_name += e.alias + ':'
-                    else:
-                        c_name += ':'
-                    subj = _traverse_polygons(subj=subj, cell=e.reference, name=c_name)
-                    # if exclude_devices is True:
-                    #     if isinstance(e.reference, Device):
-                    #         subj += e
-                    #     else:
-                    #         subj = _traverse_polygons(subj=subj, cell=e.reference, name=c_name)
-                    # else:
-                    #     subj = _traverse_polygons(subj=subj, cell=e.reference, name=c_name)
-                elif isinstance(e, Polygon):
-                    e.location_name = c_name
-                    # e.transform(expand_transform)
-                    # e.shape.move(expand_transform)
-                    subj += e
-                    # print(e.transformation)
-                c_name = name
-            # print('')
-            return subj
-
-        D = _traverse_polygons(C, S, name)
-
-        return D
+        cell = Cell(name=S.name + '_ExpandedCell')
+        D = S.flat_container(cc=cell, name_tree=[])
+        return cell
 
     def move(self, midpoint=(0,0), destination=None, axis=None):
         """  """
@@ -293,13 +282,6 @@ class Cell(__Cell__):
                     if e.id_string() == port.local_pid:
                         self.elements[i] = T(e)
         return self
-
-    def nets(self, lcar):
-        return self.elements.nets(lcar=lcar)
-
-    def create_netlist(self):
-        net = self.nets(lcar=self.lcar).disjoint()
-        return net
 
 
 def CellParameter(local_name=None, restriction=None, **kwargs):

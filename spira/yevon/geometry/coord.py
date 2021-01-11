@@ -118,7 +118,7 @@ class Coord(Transformable):
         """ The distance to another coordinate """
         return math.sqrt((other[0] - self.x)**2 + (other[1] - self.y)**2)
 
-    def angle_deg(self, other=(0.0, 0.0)):
+    def orientation(self, other=(0.0, 0.0)):
         """ the angle with respect to another coordinate, in degrees """
         return 180.0 / math.pi * self.angle_rad(other)
 
@@ -134,7 +134,7 @@ class Coord(Transformable):
 
     def to_numpy_array(self):
         return np.array([self.x, self.y])
-        
+
     def to_list(self):
         return [self.x, self.y]
 

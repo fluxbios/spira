@@ -23,7 +23,7 @@ class __RefElement__(__Element__):
 
     reference = CellParameter()
     alias = StringParameter(allow_none=True, default=None)
-    
+
     def __init__(self, transformation=None, **kwargs):
         super().__init__(transformation=transformation, **kwargs)
 
@@ -48,10 +48,10 @@ class SRef(__RefElement__):
     """
 
     midpoint = CoordParameter(default=(0,0))
-    
+
     def __init__(self, reference, midpoint=(0,0), alias=None, transformation=None, **kwargs):
         super().__init__(reference=reference, midpoint=midpoint, alias=alias, transformation=transformation, **kwargs)
-        
+
     def __repr__(self):
         name = self.reference.name
         ps = "[SPiRA: SRef] (\"{}\", alias {}, midpoint {}, transforms {})"
@@ -64,8 +64,8 @@ class SRef(__RefElement__):
         return hash(self.__repr__())
 
     def __deepcopy__(self, memo):
-        return SRef(
-        # return self.__class__(
+        # return SRef(
+        return self.__class__(
             alias=self.alias,
             reference=deepcopy(self.reference),
             midpoint=deepcopy(self.midpoint),
@@ -77,7 +77,7 @@ class SRef(__RefElement__):
         if not isinstance(other, SRef):
             return False
         return (
-            (self.reference == other.ref) and
+            (self.reference == other.reference) and
             (self.midpoint == other.position) and
             (self.transformation == other.transformation)
         )
@@ -92,6 +92,15 @@ class SRef(__RefElement__):
         d.add(self.reference.dependencies())
         return d
 
+    def net_source(self):
+        return 'source: {}'.format(self.reference.name)
+
+    def net_target(self):
+        return 'target: {}'.format(self.reference.name)
+
+    def is_valid_path(self):
+        return True
+
     def expand_transform(self):
         from spira.yevon.gdsii.sref import SRef
         from spira.yevon.gdsii.polygon import Polygon
@@ -100,24 +109,18 @@ class SRef(__RefElement__):
         C = self.reference.__class__(
             name='{}_{}'.format(self.reference.name, self.transformation.id_string()),
             elements=deepcopy(self.reference.elements),
-            ports=deepcopy(self.reference.ports))
+            ports=deepcopy(self.reference.ports)
+        )
 
         T = self.transformation + spira.Translation(self.midpoint)
 
-        C.ports.transform(T)
-
         for i, e in enumerate(C.elements):
             if isinstance(e, SRef):
-
-                midpoint = self.transformation.apply_to_coord(self.midpoint)
-                center = self.transformation.apply_to_coord(e.midpoint)
-
-                e.midpoint = (0,0)
+                e.midpoint = self.transformation.apply_to_coord(e.midpoint).move(self.midpoint)
                 e.transform(self.transformation)
-                e.translate(center-midpoint)
-
             elif isinstance(e, Polygon):
                 e.transform(T)
+        C.ports.transform(T)
 
         self.reference = C
         self.transformation = None
@@ -138,10 +141,21 @@ class SRef(__RefElement__):
         elems = elems.transform(T)
         return elems
 
-    def flatten(self, level=-1):
-        # if level == 0: return self.reference
-        D = self.reference.flatten(level)
+    def flatten(self, level=-1, name_tree=[]):
+        if level == 0: return self.reference
+        name_tree.append(self.alias)
+        nt = deepcopy(name_tree)
+        D = self.reference.flatten(level, name_tree=nt)
+        name_tree.pop()
         return D.elements
+        
+    def flat_container(self, cc, name_tree=[]):
+        if self.alias is None:
+            self.alias = ''
+        name_tree.append(self.alias)
+        nt = deepcopy(name_tree)
+        self.reference.flat_container(cc, name_tree=nt)
+        name_tree.pop()
 
     def move(self, midpoint=(0,0), destination=None, axis=None):
         """ Move the reference internal port to the destination.
@@ -211,7 +225,12 @@ class SRef(__RefElement__):
             raise ValueError('Cannot connect ports from different processes.')
 
         T = vector_match_transform(v1=p, v2=destination)
-        self.transform(T)
+        self.midpoint = T.apply_to_coord(self.midpoint)
+        self.transform(T - spira.Translation(self.midpoint))
+        # self.transformation = T - spira.Translation(self.midpoint)
+        # self.transformation = T
+        # print(T - spira.Translation(self.midpoint))
+        # print(T)
 
         return self
 
@@ -228,8 +247,11 @@ class SRef(__RefElement__):
         L = line_from_point_angle(point=destination.midpoint, angle=destination.orientation)
         dx, dy = L.get_coord_from_distance(destination, distance)
 
+        # self.move(midpoint=self.midpoint, destination=(dx,dy))
         T = spira.Translation(translation=(dx, dy))
-        self.transform(T)
+        self.midpoint = T.apply_to_coord(self.midpoint)
+        # self.transform(T - spira.Translation(self.midpoint))
+        # self.transform(T)
 
         return self
 
@@ -248,6 +270,7 @@ class SRef(__RefElement__):
         self.move(midpoint=self.midpoint, destination=coord)
         return self
 
+    # FIXME~~~~ Look at lieze_dcsfq.py
     def port_alignment(self, ports, p1, p2):
         """
         Align `ports[0]` of reference with `p1` and 
@@ -255,19 +278,32 @@ class SRef(__RefElement__):
 
         Example
         -------
-        >>> 
+        >>>
         """
-        d0 = deepcopy(p1)
-        self.connect(ports[0], d0)
+        self.connect(ports[0], deepcopy(p1))
+        # print(self.transformation)
+
         if isinstance(ports[1], str):
             pin1 = self.ports[ports[1]]
         elif issubclass(type(ports[1]), __Port__):
-            pin1 = ports[1].transform(self.transformation)
+            # pin1 = ports[1].transform(self.transformation)
+            pin1 = ports[1].transform(spira.Translation(self.midpoint))
+
+        # print(pin1)
+        # print(p2)
+        # print(ports[0])
+
         if ports[0].orientation in (0, 180):
-            T = vector_match_axis(v1=ports[1], v2=p2, axis='x')
+            T = vector_match_axis(v1=pin1, v2=p2, axis='x')
         elif ports[0].orientation in (90, 270):
-            T = vector_match_axis(v1=ports[1], v2=p2, axis='y')
-        self.transform(T) 
+            T = vector_match_axis(v1=pin1, v2=p2, axis='y')
+
+        T = T + self.transformation
+        # self.midpoint = T.apply_to_coord(Coord(0,0))
+        # self.midpoint = T.apply_to_coord(self.midpoint)
+        # self.transform(T + spira.Translation(self.midpoint))
+        self.transform(T)
+
         return self
 
     def stretch_by_factor(self, factor=(1,1), center=(0,0)):
@@ -326,12 +362,25 @@ class SRef(__RefElement__):
         >>> S.stretch_p2p(port_name='S1:Sr1:E3_R1', destination_name='S2:Sr2:E1_R1')
         """
         from spira.yevon.gdsii.polygon import Polygon
+        from spira.yevon.geometry.ports import PortList
         from spira.yevon.geometry.bbox_info import bbox_info_opposite_boundary_port
 
         D = self.expand_flat_copy()
 
-        port = D.ports[port_name]
-        destination = D.ports[destination_name]
+        # print(D.ports)
+        # print('\n------------------\n')
+
+        # print('\n*************************************')
+        ports = PortList()
+        for e in D.reference.elements.polygons:
+            # print(e.edge_ports)
+            ports += e.edge_ports
+
+        port = ports[port_name]
+        destination = ports[destination_name]
+
+        # print(port)
+        # print(destination)
 
         for i, e in enumerate(D.reference.elements.polygons):
             if e.id_string() == port.local_pid:
@@ -346,60 +395,11 @@ class SRef(__RefElement__):
         nets = NetList()
         nets += self.reference.netlist
 
-        # from spira.yevon.gdsii.pcell import Device
-        # if isinstance(self.reference, Device):
-        #     nets = [self.reference.netlist]
-        # else:
-        #     nets = self.reference.nets(lcar)
-
-        # nets = self.reference.nets(lcar, contacts)
-
         # FIXME: Is this transformation required?
         # T = self.transformation + Translation(self.midpoint)
         # nets.transform(T)
 
         return nets 
-
-    # def expand_transform(self):
-    #     """
-
-    #     Note
-    #     ----
-    #     Use __class__ cause we want to keep the
-    #     subclass tree (spira.Device) in tacks for fitlering.
-    #     """
-    #     from spira.yevon.gdsii.sref import SRef
-    #     from spira.yevon.gdsii.polygon import Polygon
-    #     from spira.core.transforms.identity import IdentityTransform
-
-    #     if not self.transformation.is_identity():
-
-    #         self.reference.expand_transform()
-
-    #         # if self.alias is None:
-    #         #     name = '{}_{}'.format(self.reference.name, self.transformation.id_string())
-    #         # else:
-    #         #     name = '{}_{}'.format(self.reference.name, self.alias)
-
-    #         C = self.reference.__class__(
-    #             name='{}_{}'.format(self.reference.name, self.transformation.id_string()),
-    #             elements=deepcopy(self.reference.elements),
-    #             ports=deepcopy(self.reference.ports))
-
-    #         T = self.transformation + spira.Translation(self.midpoint)
-    #         # T = self.transformation
-
-    #         C.elements.transform(T)
-    #         C.ports.transform(T)
-    #         # C.expand_transform()
-            
-    #         self.reference = C
-    #         self.transformation = None
-    #         self.midpoint = (0,0)
-
-    #         # self.reference.expand_transform()
-
-    #     return self
 
 
 class ARef(__RefElement__):

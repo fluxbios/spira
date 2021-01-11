@@ -65,11 +65,13 @@ RDD.PURPOSE.TEXT.PIN = PurposeLayer(name='PinText', symbol='PT')
 RDD.PURPOSE.TEXT.EDGE = PurposeLayer(name='EdgeText', symbol='ET')
 RDD.PURPOSE.TEXT.CONTACT = PurposeLayer(name='ContactText', symbol='CT')
 RDD.PURPOSE.TEXT.ROUTE = PurposeLayer(name='RouteText', symbol='IT')
+RDD.PURPOSE.TEXT.DUMMY = PurposeLayer(name='DummyText', symbol='DT')
 
 # ---------------------------------- Port Purposes ------------------------------------
 
 RDD.PURPOSE.PORT = PurposeLayerDatabase()
 RDD.PURPOSE.PORT.PIN = PurposeLayer(name='PinPort', symbol='P')
+RDD.PURPOSE.PORT.TERMINAL = PurposeLayer(name='PinPort', symbol='T')
 RDD.PURPOSE.PORT.EDGE = PurposeLayer(name='EdgePort', symbol='E')
 RDD.PURPOSE.PORT.CONTACT = PurposeLayer(name='ContactPort', symbol='C')
 RDD.PURPOSE.PORT.ROUTE = PurposeLayer(name='RoutePort', symbol='I')
@@ -104,7 +106,7 @@ RDD.PORT.WIDTH = 0.5
 
 # --------------------------------- Name Generator -------------------------------------
 
-class AdminDatabase(DelayedDatabase):
+class AdminDatabase(LazyDatabase):
     """ A technology tree with a name generator. """
 
     def initialize(self):
@@ -119,21 +121,63 @@ RDD.ADMIN = AdminDatabase()
 
 # ---------------------------- Parameterized Cell Data --------------------------------
 
-class PCellDatabase(DelayedDatabase):
+RDD.FILTERS = ParameterDatabase()
+
+class PCellFilterDatabase(LazyDatabase):
+    """ Define the filters that will be used when creating a spira.PCell object. """
 
     def initialize(self):
         from spira.yevon import filters
 
-        self.LCAR_DEVICE = 1
-        self.LCAR_CIRCUIT = 100
-
-        f = filters.ToggledCompoundFilter()
-        f += filters.ProcessBooleanFilter(name='boolean')
+        f = filters.ToggledCompositeFilter(filters=[])
+        f += filters.ProcessBooleanFilter(name='boolean', metal_purpose=RDD.PURPOSE.DEVICE_METAL)
         f += filters.SimplifyFilter(name='simplify')
-        f += filters.ViaConnectFilter(name='via_contact')
-        f += filters.MetalConnectFilter(name='metal_connect')
+        f += filters.ContactAttachFilter(name='contact_attach')
 
-        self.FILTERS = f
+        f['boolean'] = True
+        f['simplify'] = True
+        f['contact_attach'] = True
 
-RDD.PCELLS = PCellDatabase()
+        self.DEVICE = f
 
+        f = filters.ToggledCompositeFilter(filters=[])
+        f += filters.ProcessBooleanFilter(name='boolean', metal_purpose=RDD.PURPOSE.CIRCUIT_METAL)
+        f += filters.SimplifyFilter(name='simplify')
+
+        f['boolean'] = True
+        f['simplify'] = True
+
+        self.CIRCUIT = f
+
+        f = filters.ToggledCompositeFilter(name='mask_filters', filters=[])
+        f += filters.ElectricalAttachFilter(name='erc')
+        f += filters.PinAttachFilter(name='pin_attach')
+        f += filters.DeviceMetalFilter(name='device_metal')
+
+        f['erc'] = True
+        f['pin_attach'] = True
+        f['device_metal'] = False
+
+        self.MASK = f
+
+RDD.FILTERS.PCELL = PCellFilterDatabase()
+
+
+class OutputFilterDatabase(LazyDatabase):
+    """ Define the filters that will be used when creating a spira.PCell object. """
+
+    def initialize(self):
+        from spira.yevon import filters
+
+        f = filters.ToggledCompositeFilter(filters=[])
+        f += filters.PortCellFilter(name='cell_ports')
+        f += filters.PortPolygonEdgeFilter(name='edge_ports')
+        f += filters.PortPolygonContactFilter(name='contact_ports')
+
+        f['cell_ports'] = True
+        f['edge_ports'] = True
+        f['contat_ports'] = True
+
+        self.PORTS = f
+
+RDD.FILTERS.OUTPUT = OutputFilterDatabase()

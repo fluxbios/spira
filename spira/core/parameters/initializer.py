@@ -5,7 +5,7 @@ import numpy as np
 from copy import copy, deepcopy
 
 from spira.core.mixin import MetaMixinBowl, MixinBowl
-from spira.core.parameters.descriptor import BaseParameter
+from spira.core.parameters.descriptor import __Parameter__
 from spira.core.parameters.descriptor import Parameter
 from spira.core.parameters.descriptor import EXTERNAL_VALUE, CACHED_VALUE
 
@@ -232,7 +232,7 @@ class __ParameterInitializer__(metaclass=MetaInitializer):
         prop = []
         for attr_name in dir(cls):
             attr = getattr(cls, attr_name)
-            if isinstance(attr, BaseParameter):
+            if isinstance(attr, __Parameter__):
                 prop.append([attr_name, attr])
         return prop
 
@@ -347,7 +347,7 @@ class ParameterInitializer(__ParameterInitializer__):
 
         Example
         -------
-        >>> ports += p1.set(width=2.0)
+        >>> ports += port.set(width=2.0)
         """
         for key, value in override_kwargs.items():
             if key not in self.__parameters__():

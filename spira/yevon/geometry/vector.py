@@ -43,7 +43,7 @@ class Vector(Transformable, ParameterInitializer):
     def set_angle_rad(self, value):
         self.__angle__ = (constants.RAD2DEG * value) % 360.0
 
-    angle_rad = FunctionParameter(get_angle_rad, set_angle_rad, doc="The outward facing orientation of the port in radians (stored in degrees by default, converted to radians if needed)")
+    angle_rad = FunctionParameter(get_angle_rad, set_angle_rad, doc="The orientation of the port in radians (stored in degrees by default")
 
     def get_angle_deg(self):
         if hasattr(self, '__angle__'):
@@ -54,7 +54,26 @@ class Vector(Transformable, ParameterInitializer):
     def set_angle_deg(self, value):
         self.__angle__ = value % 360.0
 
-    orientation = FunctionParameter(get_angle_deg, set_angle_deg, doc = "The outward facing orientation of the port.")
+    orientation = FunctionParameter(get_angle_deg, set_angle_deg, doc = "The orientation of the port.")
+
+    def __getitem__(self, key):
+        if key == 0:
+            return self.midpoint[0]
+        if key == 1:
+            return self.midpoint[1]
+        else:
+            raise IndexError("Vector supports only subscription[0] and [1], not " + str(key))
+
+    def __eq__(self, other):
+        if not isinstance(other, Vector):
+            return False
+        return self.midpoint == other.midpoint and (self.orientation == other.orientation)
+
+    def __ne__(self, other):
+        return self.midpoint != other.midpoint or (self.orientation != other.orientation)
+
+    def __repr__(self):
+        return "<Vector (%f, %f), a=%f>" % (self.x, self.y, self.orientation)
 
     def cos(self):
         return cos(constants.DEG2RAD * self.__angle__)
@@ -68,28 +87,9 @@ class Vector(Transformable, ParameterInitializer):
     def flip(self):
         return Vector(midpoint=self.midpoint, orientation=(self.__angle__ + 180.0) % 360.0)
 
-    def __getitem__(self, key):
-        if key == 0:
-            return self.midpoint[0]
-        if key == 1:
-            return self.midpoint[1]
-        else:
-            raise IndexError("Vector supports only subscription[0] and [1], not " + str(key))
-
-    def __eq__(self, other):
-        if not isinstance(other, Vector):
-            return False
-        return self.midpoint == other.midpoint and (self.angle_deg == other.angle_deg)
-
-    def __ne__(self, other):
-        return self.midpoint != other.midpoint or (self.angle_deg != other.angle_deg)
-
-    def __repr__(self):
-        return "<Vector (%f, %f), a=%f>" % (self.x, self.y, self.angle_deg)
-
     def transform(self, transformation):
         self.midpoint = transformation.apply_to_coord(self.midpoint)
-        self.angle_deg = transformation.apply_to_angle(self.angle_deg)
+        self.orientation = transformation.apply_to_angle(self.orientation)
         return self
 
 
@@ -100,8 +100,8 @@ def transformation_from_vector(vector):
 
 def vector_from_two_points(point1, point2):
     """ Make a vector out of two points """
-    from spira.yevon.utils.geometry import angle_deg
-    return Vector(midpoint=point1, orientation=angle_deg(point2, point1))
+    from spira.yevon.utils.geometry import orientation
+    return Vector(midpoint=point1, orientation=orientation(point2, point1))
 
 
 def vector_match_transform(v1, v2):
@@ -110,7 +110,7 @@ def vector_match_transform(v1, v2):
     T = Translation(v2.midpoint - v1.midpoint)
     R = Rotation(rotation=angle, rotation_center=v2.midpoint)
     return T + R
-    
+
 
 def vector_match_axis(v1, v2, axis='x'):
     """ Returns transformation to realign vectort 1 to match midpoint and opposite orientation of vector 2 """

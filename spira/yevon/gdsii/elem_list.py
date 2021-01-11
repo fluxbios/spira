@@ -24,7 +24,8 @@ class __ElementList__(TypedList, Transformable):
         if isinstance(value, str):
             for e in self._list:
                 if issubclass(type(e), (Cell, SRef, Polygon)):
-                    if e.alias == value: r_val = e
+                    if e.alias == value:
+                        r_val = e
         elif isinstance(value, int):
             r_val = self._list[value]
         else:
@@ -117,8 +118,9 @@ class ElementList(__ElementList__):
         return cells
 
     def expand_transform(self):
-        for c in self._list:
-            c.expand_transform()
+        for S in self.sref:
+            S.expand_transform()
+            S.reference.expand_transform()
         return self
 
     def transform(self, transformation=None):
@@ -148,29 +150,17 @@ class ElementList(__ElementList__):
             elems += e.flat_copy(level)
         return elems
 
-    def flatten(self, level=-1):
+    def flatten(self, level=-1, name_tree=[]):
         elems = ElementList()
         for e in self._list:
-            elems += e.flatten(level)
+            elems += e.flatten(level, name_tree)
         return elems
+        
+    def flat_container(self, cc, name_tree=[]):
+        for e in self._list:
+            e.flat_container(cc, name_tree)
 
-    # def flatten(self):
-    #     from spira.yevon.gdsii.cell import Cell
-    #     from spira.yevon.gdsii.sref import SRef
-    #     if isinstance(self, collections.Iterable):
-    #         flat_list = ElementList()
-    #         for i in self._list:
-    #             if issubclass(type(i), Cell):
-    #                 i = i.flat_copy()
-    #             elif isinstance(i, SRef):
-    #                 i = i.flat_copy()
-    #             for a in i.flatten():
-    #                 flat_list += a
-    #         return flat_list
-    #     else:
-    #         return [self._list]
-
-    def isstored(self, pp):
+    def is_stored(self, pp):
         for e in self._list:
             return pp == e
 
